@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal 3D Photo Frame</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Noto+Sans+KR:wght@300;400&family=Gowun+Batang&family=Pinyon+Script&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        /* 🎨 미니멀 테마 팔레트 */
+        :root {
+            --bg-color: #f8f9fa; --frame-bg: #ffffff; --text-color: #2b2b2b;
+            --slot-bg: #f4f5f6; --particle-color: rgba(255, 255, 255, 0.6); --shadow-color: rgba(0, 0, 0, 0.04);
+        }
+        body.theme-midnight {
+            --bg-color: #121212; --frame-bg: #1c1c1c; --text-color: #d4d4d4;
+            --slot-bg: #242424; --particle-color: rgba(255, 255, 255, 0.05); --shadow-color: rgba(0, 0, 0, 0.5);
+        }
+        body.theme-rose {
+            --bg-color: #fcf5f5; --frame-bg: #fff0f3; --text-color: #8c5a61;
+            --slot-bg: #ffe9ec; --particle-color: rgba(255, 182, 193, 0.4); --shadow-color: rgba(140, 90, 97, 0.05);
+        }
+        body.theme-sage {
+            --bg-color: #f3f5f2; --frame-bg: #e8ece6; --text-color: #4a5c48;
+            --slot-bg: #dfe4dd; --particle-color: rgba(194, 206, 192, 0.4); --shadow-color: rgba(74, 92, 72, 0.05);
+        }
+        body.theme-lavender {
+            --bg-color: #f6f5fc; --frame-bg: #ebe8fc; --text-color: #5c548a;
+            --slot-bg: #e3dff5; --particle-color: rgba(200, 194, 235, 0.4); --shadow-color: rgba(92, 84, 138, 0.05);
+        }
+
+        * { box-sizing: border-box; }
+        
+        body {
+            background-color: var(--bg-color); margin: 0; padding: 120px 20px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; overflow-x: hidden;
+            font-family: 'Noto Sans KR', sans-serif; transition: background-color 0.8s ease;
+        }
+
+        /* 🛠 상단 메뉴 바 */
+        .ui-panel {
+            position: fixed; top: 20px; z-index: 1000;
+            display: flex; align-items: center; gap: 15px; flex-wrap: wrap; justify-content: center;
+            background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(12px);
+            padding: 12px 25px; border-radius: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid rgba(255,255,255,0.5);
+        }
+
+        .palette { display: flex; gap: 12px; }
+        .color-swatch {
+            width: 18px; height: 18px; border-radius: 50%; cursor: pointer;
+            border: 1px solid rgba(0,0,0,0.1); transition: transform 0.2s;
+        }
+        .color-swatch:hover { transform: scale(1.3); }
+        .divider { width: 1px; height: 16px; background-color: var(--text-color); opacity: 0.2; }
+
+        .font-selector {
+            background: transparent; border: none; outline: none;
+            color: var(--text-color); font-family: 'Noto Sans KR', sans-serif;
+            font-size: 0.85rem; cursor: pointer; padding: 2px;
+        }
+
+        .save-btn {
+            background: transparent; border: none; color: var(--text-color);
+            font-family: 'Cormorant Garamond', serif; font-size: 0.95rem; font-weight: 600;
+            letter-spacing: 0.1em; cursor: pointer; text-transform: uppercase; opacity: 0.6; transition: opacity 0.3s;
+        }
+        .save-btn:hover { opacity: 1; }
+
+        /* 🌟 3D 애니메이션 프레임 */
+        .perspective-wrapper { 
+            perspective: 1500px; z-index: 10; 
+            display: flex; justify-content: center; align-items: center;
+            padding: 20px;
+        }
+        
+        .frame-wrapper { 
+            animation: floatCard 6s ease-in-out infinite; 
+        }
+        @keyframes floatCard {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(8px); }
+            100% { transform: translateY(0px); }
+        }
+
+        .frame-container {
+            background-color: var(--frame-bg); 
+            padding: 28px 14px 28px 14px; 
+            width: 300px;
+            box-shadow: 0 40px 60px var(--shadow-color), 0 10px 25px rgba(0,0,0,0.03);
+            border-radius: 2px; display: flex; flex-direction: column; gap: 10px;
+            transition: transform 0.2s ease-out, background-color 0.8s ease, box-shadow 0.4s ease;
+            will-change: transform; 
+        }
+
+        .perspective-wrapper:hover .frame-container {
+            box-shadow: 0 50px 80px var(--shadow-color), 0 15px 35px rgba(0,0,0,0.05);
+        }
+
+        /* 📸 사진 슬롯 */
+        .slot {
+            width: 100%; aspect-ratio: 3 / 2; background-color: var(--slot-bg);
+            position: relative; overflow: hidden; border-radius: 2px;
+            display: flex; justify-content: center; align-items: center;
+            transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1), box-shadow 0.4s ease, background-color 0.8s ease;
+        }
+        .slot:hover {
+            transform: scale(1.03);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            z-index: 25;
+        }
+
+        /* 무적 업로드 버튼 (투명 오버레이 방식) */
+        .file-input-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0; cursor: pointer; z-index: 100;
+        }
+
+        .upload-trigger {
+            position: absolute; display: flex; justify-content: center; align-items: center;
+            color: var(--text-color); font-size: 2rem; opacity: 0.3; pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .slot:hover .upload-trigger { opacity: 0.8; transform: scale(1.1); }
+
+        .reupload-btn {
+            position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
+            background: rgba(0, 0, 0, 0.4); color: white; border-radius: 50%;
+            display: none; justify-content: center; align-items: center;
+            font-size: 0.8rem; z-index: 110; backdrop-filter: blur(2px);
+            transition: background 0.2s, transform 0.2s; overflow: hidden;
+        }
+        .reupload-btn:hover { background: rgba(0, 0, 0, 0.7); transform: rotate(90deg); }
+        .slot:hover .reupload-btn.active { display: flex; } 
+
+        .slot img {
+            position: absolute; width: 100%; height: 100%; object-fit: cover;
+            cursor: grab; display: none; 
+            z-index: 10; image-rendering: high-quality;
+            -webkit-user-drag: none; transform-origin: center center;
+        }
+        .slot img:active { cursor: grabbing; }
+
+        /* ✍️ 글씨 수정 영역 */
+        .text-area { 
+            margin-top: 18px; display: flex; justify-content: center; 
+            position: relative; z-index: 50; width: 100%;
+        }
+        .editable-text {
+            background: transparent; border: none; border-bottom: 1px solid transparent;
+            color: var(--text-color); font-family: 'Cormorant Garamond', serif;
+            font-size: 1.3rem; font-weight: 400; letter-spacing: 0.02em;
+            text-align: center; width: 100%; padding: 5px; outline: none; 
+            transition: border 0.3s, color 0.8s; white-space: nowrap;
+        }
+        .editable-text:focus { border-bottom: 1px dashed rgba(0,0,0,0.2); }
+        body.theme-midnight .editable-text:focus { border-bottom: 1px dashed rgba(255,255,255,0.3); }
+
+        /* ✨ 보케 파티클 */
+        .bokeh {
+            position: fixed; background: var(--particle-color); border-radius: 50%;
+            pointer-events: none; z-index: 1; filter: blur(4px); animation: floatUp linear forwards;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(110vh) scale(0.8); opacity: 0; }
+            20%, 80% { opacity: 1; }
+            100% { transform: translateY(-10vh) scale(1.2); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ui-panel" data-html2canvas-ignore="true">
+        <div class="palette">
+            <div class="color-swatch" style="background: #ffffff;" onclick="setTheme('')" title="Pure White"></div>
+            <div class="color-swatch" style="background: #1c1c1c;" onclick="setTheme('theme-midnight')" title="Midnight Black"></div>
+            <div class="color-swatch" style="background: #fff0f3;" onclick="setTheme('theme-rose')" title="Rose Blush"></div>
+            <div class="color-swatch" style="background: #e8ece6;" onclick="setTheme('theme-sage')" title="Sage Green"></div>
+            <div class="color-swatch" style="background: #ebe8fc;" onclick="setTheme('theme-lavender')" title="Lavender Fog"></div>
+        </div>
+        <div class="divider"></div>
+        <select class="font-selector" onchange="changeFont(this.value)">
+            <option value="'Cormorant Garamond', serif">영문 세리프</option>
+            <option value="'Pinyon Script', cursive">영문 필기체</option>
+            <option value="'Gowun Batang', serif">고운 바탕</option>
+            <option value="'Noto Sans KR', sans-serif">모던 고딕</option>
+        </select>
+        <div class="divider"></div>
+        <button class="save-btn" onclick="saveImage()">Save</button>
+    </div>
+
+    <div class="perspective-wrapper">
+        <div class="frame-wrapper" id="frame-wrapper">
+            <div class="frame-container" id="capture-area">
+                
+                <div class="slot">
+                    <input type="file" id="main-file-1" class="file-input-overlay" accept="image/*" onchange="handleUpload(event, 1)">
+                    <div class="upload-trigger" id="trigger-1">+</div>
+                    <div class="reupload-btn" id="reup-1">
+                        ↻
+                        <input type="file" class="file-input-overlay" accept="image/*" onchange="handleUpload(event, 1)">
+                    </div>
+                    <img id="img-1" src="">
+                </div>
+                <div class="slot">
+                    <input type="file" id="main-file-2" class="file-input-overlay" accept="image/*" onchange="handleUpload(event, 2)">
+                    <div class="upload-trigger" id="trigger-2">+</div>
+                    <div class="reupload-btn" id="reup-2">
+                        ↻
+                        <input type="file" class="file-input-overlay" accept="image/*" onchange="handleUpload(event, 2)">
+                    </div>
+                    <img id="img-2" src="">
+                </div>
+                <div class="slot">
+                    <input type="file" id="main-file-3" class="file-input-overlay" accept="image/*" onchange="handleUpload(event, 3)">
+                    <div class="upload-trigger" id="trigger-3">+</div>
+                    <div class="reupload-btn" id="reup-3">
+                        ↻
+                        <input type="file" class="file-input-overlay" accept="image/*" onchange="handleUpload(event, 3)">
+                    </div>
+                    <img id="img-3" src="">
+                </div>
+                <div class="slot">
+                    <input type="file" id="main-file-4" class="file-input-overlay" accept="image/*" onchange="handleUpload(event, 4)">
+                    <div class="upload-trigger" id="trigger-4">+</div>
+                    <div class="reupload-btn" id="reup-4">
+                        ↻
+                        <input type="file" class="file-input-overlay" accept="image/*" onchange="handleUpload(event, 4)">
+                    </div>
+                    <img id="img-4" src="">
+                </div>
+
+                <div class="text-area">
+                    <div id="editable-text" class="editable-text" contenteditable="true" spellcheck="false">Cherished Memories</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isTyping = false;
+        let isDraggingImage = false;
+
+        // 🌟 3D 프레임 호버 틸트 효과
+        const wrapper = document.querySelector('.perspective-wrapper');
+        const frame = document.getElementById("capture-area");
+
+        wrapper.addEventListener("mousemove", e => {
+            if (isTyping || isDraggingImage) return; 
+            const rect = wrapper.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const tiltX = ((y - centerY) / centerY) * -12; 
+            const tiltY = ((x - centerX) / centerX) * 12;
+            frame.style.transform = `rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+        });
+
+        wrapper.addEventListener("mouseleave", () => {
+            if (isTyping || isDraggingImage) return; 
+            frame.style.transform = `rotateX(0deg) rotateY(0deg)`;
+            frame.style.transition = 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1)';
+        });
+
+        wrapper.addEventListener("mouseenter", () => {
+            if (isTyping || isDraggingImage) return; 
+            frame.style.transition = 'transform 0.1s ease-out';
+        });
+
+        // 텍스트 편집 시 3D 멈춤
+        const textBox = document.getElementById('editable-text');
+        textBox.addEventListener('focus', () => { 
+            isTyping = true; 
+            frame.style.transform = 'rotateX(0deg) rotateY(0deg)'; 
+        });
+        textBox.addEventListener('blur', () => { isTyping = false; });
+
+        function setTheme(themeClass) { document.body.className = themeClass; }
+        
+        function changeFont(fontName) {
+            textBox.style.fontFamily = fontName;
+            textBox.style.fontSize = fontName.includes('Pinyon') ? '2.2rem' : '1.3rem';
+        }
+
+        // 📸 이미지 업로드 처리
+        function handleUpload(event, index) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.getElementById(`img-${index}`);
+                const trigger = document.getElementById(`trigger-${index}`);
+                const reuploadBtn = document.getElementById(`reup-${index}`);
+                const mainFileInput = document.getElementById(`main-file-${index}`);
+                
+                img.src = e.target.result;
+                img.style.display = 'block'; 
+                
+                trigger.style.display = 'none'; 
+                if(mainFileInput) mainFileInput.style.display = 'none';
+                reuploadBtn.classList.add('active'); 
+                
+                img.dataset.tx = 0; img.dataset.ty = 0; img.dataset.scale = 1.05; 
+                applyTransform(img);
+                setupDragAndZoom(img);
+            }
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        function applyTransform(img) {
+            img.style.transform = `translate(${img.dataset.tx}px, ${img.dataset.ty}px) scale(${img.dataset.scale})`;
+        }
+
+        // ✋ 사진 확대/축소(Zoom) & 이동(Drag)
+        function setupDragAndZoom(img) {
+            let isDragging = false;
+            let startX, startY;
+
+            img.onwheel = function(e) {
+                e.preventDefault(); 
+                let scale = parseFloat(img.dataset.scale);
+                scale += e.deltaY * -0.0015; 
+                if (scale < 0.5) scale = 0.5;
+                if (scale > 3.0) scale = 3.0;
+                img.dataset.scale = scale;
+                img.style.transition = 'none'; 
+                applyTransform(img);
+            };
+
+            img.onmousedown = function(e) {
+                e.preventDefault();
+                isDragging = true;
+                isDraggingImage = true; 
+                frame.style.transform = 'rotateX(0deg) rotateY(0deg)'; 
+                
+                startX = e.clientX - parseFloat(img.dataset.tx);
+                startY = e.clientY - parseFloat(img.dataset.ty);
+                img.style.transition = 'none'; 
+            };
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                img.dataset.tx = e.clientX - startX;
+                img.dataset.ty = e.clientY - startY;
+                applyTransform(img);
+            });
+
+            const stopDrag = () => {
+                if (isDragging) {
+                    isDragging = false;
+                    isDraggingImage = false;
+                    img.style.transition = 'transform 0.2s ease-out'; 
+                }
+            };
+            window.addEventListener('mouseup', stopDrag);
+        }
+
+        // ✨ 배경 보케 파티클
+        setInterval(() => {
+            const bokeh = document.createElement('div');
+            bokeh.classList.add('bokeh');
+            const size = Math.random() * 25 + 10; 
+            bokeh.style.width = `${size}px`; bokeh.style.height = `${size}px`;
+            bokeh.style.left = `${Math.random() * 100}vw`;
+            const duration = Math.random() * 8 + 8; 
+            bokeh.style.animationDuration = `${duration}s`;
+            document.body.appendChild(bokeh);
+            setTimeout(() => bokeh.remove(), duration * 1000);
+        }, 800);
+
+        // 💾 흔들림 없는 완벽한 캡처 로직 (수정됨)
+        function saveImage() {
+            const wrapper = document.getElementById('frame-wrapper');
+            const btn = document.querySelector('.save-btn');
+            const textBox = document.getElementById('editable-text');
+
+            btn.innerText = "Saving..."; 
+            btn.style.pointerEvents = "none";
+            textBox.blur(); 
+            
+            // 1. 기존 트랜지션 및 애니메이션 값 저장
+            const originalFrameTransition = frame.style.transition;
+            const originalWrapperAnimation = wrapper.style.animation;
+
+            // 2. 캡처 방해 요소 즉시 제거 (강제로 멈춤)
+            frame.style.transition = 'none'; // CSS 전환 애니메이션 완전히 끔
+            frame.style.transform = 'rotateX(0deg) rotateY(0deg)'; // 즉각 평면 정렬
+            wrapper.style.animation = 'none'; // 플로팅 효과 제거
+
+            // 버튼 등 UI 숨기기
+            document.querySelectorAll('.reupload-btn').forEach(el => el.style.display = 'none');
+
+            // 3. 브라우저가 프레임을 완벽히 멈춘 상태로 그릴 수 있도록 0.3초 대기 후 캡처
+            document.fonts.ready.then(() => {
+                setTimeout(() => {
+                    html2canvas(frame, {
+                        scale: 3, 
+                        useCORS: true,
+                        backgroundColor: getComputedStyle(document.body).getPropertyValue('--frame-bg').trim()
+                    }).then(canvas => {
+                        // 원상 복구
+                        frame.style.transition = originalFrameTransition;
+                        wrapper.style.animation = 'floatCard 6s ease-in-out infinite';
+                        document.querySelectorAll('.reupload-btn.active').forEach(el => el.style.display = 'flex');
+
+                        const link = document.createElement('a');
+                        link.download = 'Minimal_Photo_Frame.png';
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+
+                        btn.innerText = "Save"; 
+                        btn.style.pointerEvents = "auto";
+                    });
+                }, 300); // 150ms -> 300ms로 늘려 안정성 확보
+            });
+        }
+    </script>
+</body>
+</html>
