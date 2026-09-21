@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="MOMO.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Sans+KR:wght@300;400;500&family=Gowun+Batang&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Sans+KR:wght@300;400;500&family=Gowun+Batang:wght@400;700&family=Pinyon+Script&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
 
@@ -117,6 +117,10 @@ button{font-family:inherit; color:inherit; font-size:inherit}
   border:1px solid rgba(130,130,130,.22); transition:box-shadow .18s;
 }
 .swatch[aria-pressed="true"]{box-shadow:0 0 0 2px var(--paper),0 0 0 3px var(--accent)}
+/* 직접 고르기: 평소엔 무지개, 고른 뒤엔 그 색 */
+.swatch.custom{position:relative; display:inline-block; overflow:hidden;
+  background:conic-gradient(#f5a3b5,#f6d38a,#b7dca0,#9ccbe8,#c3b2ee,#f5a3b5)}
+.swatch.custom input{position:absolute; inset:-6px; width:calc(100% + 12px); height:calc(100% + 12px); opacity:0; cursor:pointer; border:0; padding:0}
 
 /* 세그먼트 */
 .seg{display:flex; gap:1px; padding:2px; background:var(--soft); border-radius:var(--r)}
@@ -290,7 +294,7 @@ select option{background:var(--paper); color:var(--ink)}
   width:100%; padding:2px 4px; outline:none; white-space:nowrap; overflow:hidden;
   font-family:'Cormorant Garamond',serif; font-size:1.15rem; letter-spacing:.02em;
 }
-.ed.sub{font-family:'Noto Sans KR',sans-serif; font-size:.54rem; letter-spacing:.2em; opacity:.5}
+.ed.sub{font-family:'Noto Sans KR',sans-serif; font-size:.54rem; font-weight:500; letter-spacing:.2em; opacity:.5}
 .ed:focus{border-bottom:1px dashed currentColor}
 .ed:empty::before{content:attr(data-ph); opacity:.28}
 
@@ -506,9 +510,10 @@ const TYPES=[{id:'png',label:'PNG'},{id:'gif',label:'GIF'}];
 const MODES=[{id:'each',label:'각각'},{id:'together',label:'나란히'}];
 const PNG_SCALES=[{id:'2',label:'2×'},{id:'3',label:'3×'}];
 const GIF_LEVELS=[
-  {id:'fast',label:'빠름',maxH:500,quality:15,delay:85,unit:6,hold:8},
-  {id:'std',label:'표준',maxH:660,quality:11,delay:62,unit:9,hold:12},
-  {id:'high',label:'고화질',maxH:820,quality:8,delay:45,unit:13,hold:16}
+  // maxH: 카드 높이(px) · cap: 캡처 배율 · px: 한 장면 최대 픽셀 수(메모리 한도)
+  {id:'fast',label:'빠름',maxH:760,cap:2,px:600000,quality:10,delay:85,unit:6,hold:8},
+  {id:'std',label:'표준',maxH:1100,cap:3,px:1100000,quality:10,delay:62,unit:9,hold:12},
+  {id:'high',label:'고화질',maxH:1500,cap:3,px:1900000,quality:10,delay:45,unit:13,hold:16}
 ];
 const GIF_STYLES=[
   {id:'print',label:'인화'},
@@ -541,7 +546,44 @@ const $=id=>document.getElementById(id);
 const stage=$('stage'), rail=$('rail');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const preset=()=>PRESETS.find(p=>p.id===S.preset)||PRESETS[2];
-const themeOf=id=>THEMES.find(t=>t.id===id)||THEMES[0];
+const isHex=t=>typeof t==='string'&&/^#[0-9a-f]{6}$/i.test(t);
+const themeOf=id=>isHex(id)?{id,name:'직접 고른 색',chip:id}:(THEMES.find(t=>t.id===id)||THEMES[0]);
+const fileTag=id=>isHex(id)?'custom':(id||'white');
+
+/* 직접 고른 카드 색 → 글자·칸·그림자 색을 자동으로 맞춘다 */
+const hexRgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const rgbHex=c=>'#'+c.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
+const mixRgb=(a,b,t)=>a.map((v,i)=>v+(b[i]-v)*t);
+function rgbToHsl([r,g,b]){
+  r/=255; g/=255; b/=255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=(mx+mn)/2; let h=0, s=0;
+  if(mx!==mn){const d=mx-mn; s=l>.5?d/(2-mx-mn):d/(mx+mn);
+    h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4; h/=6;}
+  return [h,s,l];
+}
+function hslToRgb([h,s,l]){
+  if(!s) return [l*255,l*255,l*255];
+  const q=l<.5?l*(1+s):l+s-l*s, p=2*l-q;
+  const f=t=>{t=(t+1)%1; return t<1/6?p+(q-p)*6*t:t<.5?q:t<2/3?p+(q-p)*(2/3-t)*6:p;};
+  return [f(h+1/3)*255,f(h)*255,f(h-1/3)*255];
+}
+function customVars(hex){
+  const bg=hexRgb(hex), [h,s]=rgbToHsl(bg);
+  const light=(.299*bg[0]+.587*bg[1]+.114*bg[2])/255>.56;
+  const ink=light?hslToRgb([h,Math.min(s,.32),.3]):hslToRgb([h,Math.min(s,.14),.91]);
+  const slot=light?mixRgb(bg,ink,.09):mixRgb(bg,[255,255,255],.09);
+  const shadow=light?`rgba(${ink.map(Math.round).join(',')},.16)`:'rgba(0,0,0,.4)';
+  return {'--frame-bg':hex,'--frame-ink':rgbHex(ink),'--slot-bg':rgbHex(slot),'--frame-shadow':shadow};
+}
+function applyTheme(frame,theme){
+  const keys=['--frame-bg','--frame-ink','--slot-bg','--frame-shadow'];
+  if(isHex(theme)){
+    frame.dataset.theme='custom';
+    const v=customVars(theme); keys.forEach(k=>frame.style.setProperty(k,v[k]));
+  } else {
+    frame.dataset.theme=theme; keys.forEach(k=>frame.style.removeProperty(k));
+  }
+}
 const bgColor=()=>{
   const b=BGS.find(x=>x.id===S.bg)||BGS[0];
   if(b.id==='auto') return S.ui==='dark'?'#101113':'#f4f4f2';
@@ -626,7 +668,7 @@ function makeCard(ci,theme){
   del.className='card-del'; del.textContent='✕'; del.setAttribute('data-html2canvas-ignore','true');
   del.onclick=e=>{e.stopPropagation(); removeCard(ci);};
   const frame=document.createElement('div');
-  frame.className='frame'; frame.dataset.theme=theme;
+  frame.className='frame'; applyTheme(frame,theme);
   const grid=document.createElement('div');
   grid.className='slot-grid';
   for(let i=0;i<preset().count;i++) grid.appendChild(makeSlot(ci,i));
@@ -636,7 +678,7 @@ function makeCard(ci,theme){
                  <div class="ed sub" contenteditable="true" spellcheck="false" data-ph="Subtitle"></div>`;
   const [t1,t2]=cap.querySelectorAll('.ed');
   t1.textContent=S.title; t2.textContent=S.sub;
-  t1.style.fontFamily=S.font; t1.style.fontSize=S.font.includes('Pinyon')?'1.9rem':'1.15rem';
+  styleTitle(t1);
   bindCaption(t1,'title'); bindCaption(t2,'sub');
   const label=document.createElement('button');
   label.className='card-label'; label.setAttribute('data-html2canvas-ignore','true');
@@ -648,6 +690,15 @@ function makeCard(ci,theme){
     if(S.active!==ci){S.active=ci; refreshSelection(); buildCardChips(); save();}
   });
   return wrap;
+}
+// 캡션 제목: 글꼴마다 실제로 있는 굵은 굵기를 쓴다 (없는 굵기를 억지로 만들면 뭉개져 보임)
+const TITLE_WEIGHT={"'Cormorant Garamond', serif":600,"'Gowun Batang', serif":700,"'Noto Sans KR', sans-serif":500,"'Pinyon Script', cursive":400};
+function styleTitle(t){
+  t.style.fontFamily=S.font;
+  t.style.fontSize=S.font.includes('Pinyon')?'1.9rem':'1.15rem';
+  t.style.fontWeight=TITLE_WEIGHT[S.font]||600;
+  // 필기체는 굵은 굵기가 없어 획을 아주 살짝만 덧입힌다
+  t.style.textShadow=S.font.includes('Pinyon')?'0 0 .5px currentColor, 0 0 .5px currentColor':'';
 }
 function bindCaption(el,key){
   el.addEventListener('input',()=>{
@@ -667,7 +718,14 @@ function bindCaption(el,key){
 function refreshSelection(){
   [...rail.querySelectorAll('.card-wrap')].forEach((w,i)=>w.classList.toggle('sel',i===S.active));
   $('theme-name').textContent=themeOf(S.cards[S.active]).name;
-  [...$('palette').children].forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===S.cards[S.active])));
+  const cur=S.cards[S.active];
+  [...$('palette').querySelectorAll('.swatch:not(.custom)')].forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===cur)));
+  const cs=$('palette').querySelector('.swatch.custom');
+  if(cs){
+    cs.setAttribute('aria-pressed',String(isHex(cur)));
+    cs.style.background=isHex(cur)?cur:'';
+    if(isHex(cur)) cs.querySelector('input').value=cur;
+  }
   [...$('card-chips').querySelectorAll('.chip')].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===S.active)));
   updateCount();
 }
@@ -925,7 +983,7 @@ async function savePng(){
   if(S.mode==='each'){
     for(let i=0;i<els.length;i++){
       const c=await shoot(els[i],scale);
-      download(await toBlob(c),`frame_${i+1}_${themeOf(S.cards[i]).id||'white'}_${stamp()}.png`);
+      download(await toBlob(c),`frame_${i+1}_${fileTag(S.cards[i])}_${stamp()}.png`);
       toast('저장 중…',{sticky:true,progress:(i+1)/els.length});
       await sleep(400);
     }
@@ -966,7 +1024,7 @@ function drawShine(ctx,x,y,w,h,t,rad){
   ctx.restore();
 }
 
-async function buildScene(indices,{capScale,maxW,maxH,needEmpty=true,onProgress}){
+async function buildScene(indices,{capScale,maxW,maxH,px=Infinity,needEmpty=true,onProgress}){
   const els=frameEls();
   const R=rectsOf(els[indices[0]]);
   const shots=[];
@@ -978,11 +1036,14 @@ async function buildScene(indices,{capScale,maxW,maxH,needEmpty=true,onProgress}
     onProgress?.((k+1)/indices.length);
   }
   const src=shots[0].full, ratio=src.height/src.width;
-  let cw=Math.min(380,src.width), ch=cw*ratio;
+  // 캡처 원본 크기에서 시작해 높이·폭·총 픽셀 한도 안으로만 줄인다 (확대는 하지 않음)
+  let cw=src.width, ch=src.height;
   if(ch>maxH){ch=maxH; cw=ch/ratio;}
   const n=shots.length, gapR=.10, padR=.13;
   const totalW=cw*(n+(n-1)*gapR+padR*2);
   if(totalW>maxW){const k=maxW/totalW; cw*=k; ch*=k;}
+  const area=cw*(n+(n-1)*gapR+padR*2)*(ch+cw*.18);
+  if(area>px){const k=Math.sqrt(px/area); cw*=k; ch*=k;}
   cw=Math.round(cw); ch=Math.round(ch);
   const gap=Math.round(cw*gapR), pad=Math.round(cw*padR);
   const W=pad*2+n*cw+(n-1)*gap, oy=Math.round(cw*.09), H=Math.round(ch+oy*2);
@@ -1159,13 +1220,13 @@ async function workerScript(){
   const r=await fetch(WORKER_URL);
   if(!r.ok) throw new Error('worker');
   let code=await r.text();
-  // 고정 팔레트를 쓸 때 색 찾기를 5비트 단위로 기억해 두어 인코딩 속도를 유지한다
+  // 고정 팔레트를 쓸 때 색 찾기를 6비트 단위로 기억해 두어 정확도와 인코딩 속도를 함께 유지한다
   const needle='GIFEncoder.prototype.findClosestRGB=function(r,g,b,used){';
   if(code.includes(needle)){
     code=code.replace(needle,
       'GIFEncoder.prototype.findClosestRGB=function(r,g,b,used){'+
-        'if(!used&&!this.neuQuant&&this.colorTab){var k=(r>>3)<<10|(g>>3)<<5|(b>>3);'+
-        'if(!this._qc)this._qc=new Int16Array(32768).fill(-1);var h=this._qc[k];'+
+        'if(!used&&!this.neuQuant&&this.colorTab){var k=(r>>2)<<12|(g>>2)<<6|(b>>2);'+
+        'if(!this._qc)this._qc=new Int16Array(262144).fill(-1);var h=this._qc[k];'+
         'if(h<0){h=this._fcSlow(r,g,b,false);this._qc[k]=h}return h}'+
         'return this._fcSlow(r,g,b,used)};'+
       'GIFEncoder.prototype._fcSlow=function(r,g,b,used){');
@@ -1243,7 +1304,7 @@ function buildGifPalette(frames,scene){
 async function buildGif(indices,fileName,base=0,span=1){
   const L=GIF_LEVELS.find(g=>g.id===S.gif)||GIF_LEVELS[1];
   const style=S.gstyle;
-  const scene=await buildScene(indices,{capScale:2,maxW:1000,maxH:L.maxH,needEmpty:style!=='print',
+  const scene=await buildScene(indices,{capScale:L.cap,maxW:2400,maxH:L.maxH,px:L.px,needEmpty:style!=='print',
     onProgress:p=>toast('카드 캡처 중…',{sticky:true,progress:base+span*p*.1})});
   const seq=makeTimeline(style,L,scene);
   const out=document.createElement('canvas');
@@ -1256,7 +1317,7 @@ async function buildGif(indices,fileName,base=0,span=1){
     toast('프레임 만드는 중…',{sticky:true,progress:base+span*(.1+(f+1)/seq.total*.3)});
     await sleep(0);
   }
-  const gif=new GIF({workers:2,quality:L.quality,width:scene.W,height:scene.H,
+  const gif=new GIF({workers:Math.max(2,Math.min(4,(navigator.hardwareConcurrency||2)-1)),quality:L.quality,width:scene.W,height:scene.H,
     workerScript:await workerScript(),repeat:0,background:scene.bg,dither:false,
     globalPalette:buildGifPalette(frames,scene)});
   frames.forEach((fr,f)=>gif.addFrame(fr,{delay:f===frames.length-1?L.delay*7:L.delay}));
@@ -1278,7 +1339,7 @@ async function buildGif(indices,fileName,base=0,span=1){
 async function saveGif(){
   if(S.mode==='each'){
     for(let i=0;i<S.cards.length;i++){
-      await buildGif([i],`frame_${i+1}_${themeOf(S.cards[i]).id||'white'}_${stamp()}.gif`,i/S.cards.length,1/S.cards.length);
+      await buildGif([i],`frame_${i+1}_${fileTag(S.cards[i])}_${stamp()}.gif`,i/S.cards.length,1/S.cards.length);
       await sleep(400);
     }
     toast(`GIF ${S.cards.length}개 저장 완료`);
@@ -1317,14 +1378,25 @@ function buildPalette(){
     const b=document.createElement('button');
     b.className='swatch'; b.style.background=t.chip; b.title=t.name; b.dataset.theme=t.id;
     b.setAttribute('aria-pressed',String(t.id===S.cards[S.active]));
-    b.onclick=()=>{
-      S.cards[S.active]=t.id;
-      const f=rail.querySelectorAll('.frame')[S.active];
-      if(f) f.dataset.theme=t.id;
-      buildCardChips(); refreshSelection(); save();
-    };
+    b.onclick=()=>setCardTheme(t.id,true);
     el.appendChild(b);
   });
+  // 직접 고르기 (label로 감싸야 모든 브라우저에서 색상 선택기가 열린다)
+  const c=document.createElement('label');
+  c.className='swatch custom'; c.title='직접 고르기';
+  c.innerHTML='<input type="color" aria-label="카드 색 직접 고르기">';
+  const inp=c.querySelector('input');
+  inp.value=isHex(S.cards[S.active])?S.cards[S.active]:'#f3e4dc';
+  inp.addEventListener('input',()=>setCardTheme(inp.value.toLowerCase(),false));
+  inp.addEventListener('change',()=>setCardTheme(inp.value.toLowerCase(),true));
+  el.appendChild(c);
+}
+function setCardTheme(theme,persist){
+  S.cards[S.active]=theme;
+  const f=rail.querySelectorAll('.frame')[S.active];
+  if(f) applyTheme(f,theme);
+  buildCardChips(); refreshSelection();
+  if(persist) save();
 }
 function buildPresets(){
   const el=$('presets'); el.innerHTML='';
@@ -1371,7 +1443,7 @@ $('ratio-select').onchange=e=>{S.ratio=e.target.value; applyLayout(); scheduleRe
 $('font-select').onchange=e=>{
   S.font=e.target.value;
   rail.querySelectorAll('.caption .ed:not(.sub)').forEach(t=>{
-    t.style.fontFamily=S.font; t.style.fontSize=S.font.includes('Pinyon')?'1.9rem':'1.15rem';
+    styleTitle(t);
   });
   save();
 };
@@ -1431,7 +1503,7 @@ load();
   const optVals=id=>[...$(id).options].map(o=>o.value);
   const num=(v,min,max,def)=>Number.isFinite(+v)?Math.min(max,Math.max(min,+v)):def;
   if(!Array.isArray(S.cards)||!S.cards.length) S.cards=[''];
-  S.cards=S.cards.slice(0,5).map(t=>THEMES.some(x=>x.id===t)?t:'');
+  S.cards=S.cards.slice(0,5).map(t=>THEMES.some(x=>x.id===t)||isHex(t)?t:'');
   S.active=Math.max(0,Math.min(Number.isInteger(S.active)?S.active:0,S.cards.length-1));
   S.preset=pick(S.preset,PRESETS,'strip'); S.bg=pick(S.bg,BGS,'auto'); S.filter=pick(S.filter,FILTERS,'none');
   S.type=pick(S.type,TYPES,'png'); S.mode=pick(S.mode,MODES,'each'); S.png=pick(S.png,PNG_SCALES,'3');
